@@ -1,12 +1,12 @@
 import os
 import requests
 import json
-from datetime import time
-import pytz
+from flask import Flask
+from threading import Thread
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# --- Токен через Environment Variable ---
+# --- Telegram Token через Environment Variable ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("Environment variable BOT_TOKEN not set!")
@@ -23,7 +23,7 @@ ACCOUNTS = [
     {"email": "cpmkingking42@gmail.com", "password": "666666"},
 ]
 
-# --- Функции работы с аккаунтами ---
+# --- Функции для аккаунтов ---
 def login(email, password):
     payload = {
         "clientType": "CLIENT_TYPE_ANDROID",
@@ -59,33 +59,32 @@ def set_rank(token):
         return False
 
 def run_rank():
-    success_count = 0
     for acc in ACCOUNTS:
         token = login(acc["email"], acc["password"])
-        if token and set_rank(token):
-            success_count += 1
-    return success_count, len(ACCOUNTS)
+        if token:
+            set_rank(token)
+    return True
 
-# --- Telegram Handlers ---
+# --- Telegram Handler ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🚀 Запуск KING RANK...")
-    success, total = run_rank()
-    await update.message.reply_text(f"👑 KING RANK выполнен!\nУспешно: {success}/{total} аккаунтов")
+    run_rank()
+    await update.message.reply_text("👑 KING RANK установлены на всех аккаунтах!")
 
-# --- Авто запуск по расписанию ---
-async def scheduled_rank(context: ContextTypes.DEFAULT_TYPE):
-    success, total = run_rank()
-    print(f"Авто KING RANK выполнен: {success}/{total} аккаунтов")  # Логи на Render
+# --- Flask для Render ---
+flask_app = Flask(__name__)
 
-# --- Инициализация бота ---
+@flask_app.route("/")
+def index():
+    return "Bot is running!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=port)
+
+Thread(target=run_flask).start()
+
+# --- Telegram Bot ---
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
-
-# --- Таймзона Москва ---
-moscow_tz = pytz.timezone("Europe/Moscow")
-
-# --- Запуск ежедневно в 23:40 по Москве ---
-app.job_queue.run_daily(scheduled_rank, time=time(hour=23, minute=40, tzinfo=moscow_tz))
-
-# --- Запуск polling ---
 app.run_polling()
